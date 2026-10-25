@@ -10,6 +10,9 @@ on:
       - 'packages/map-web/**'
       - '.github/workflows/ci-packages-map-web.yml'
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest

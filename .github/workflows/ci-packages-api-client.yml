@@ -10,6 +10,9 @@ on:
       - 'packages/api-client/**'
       - '.github/workflows/ci-packages-api-client.yml'
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest

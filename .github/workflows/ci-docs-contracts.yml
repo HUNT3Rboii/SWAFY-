@@ -10,6 +10,9 @@ on:
       - 'docs/contracts/**'
       - '.github/workflows/ci-docs-contracts.yml'
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest

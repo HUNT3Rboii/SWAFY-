@@ -10,6 +10,9 @@ on:
       - 'apps/api/**'
       - '.github/workflows/ci-apps-api.yml'
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
