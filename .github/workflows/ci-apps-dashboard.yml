@@ -1,0 +1,20 @@
+name: CI apps/dashboard
+
+on:
+  pull_request:
+    paths:
+      - 'apps/dashboard/**'
+      - '.github/workflows/ci-apps-dashboard.yml'
+  push:
+    paths:
+      - 'apps/dashboard/**'
+      - '.github/workflows/ci-apps-dashboard.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate area
+        run: echo "No automated checks configured yet for apps/dashboard"

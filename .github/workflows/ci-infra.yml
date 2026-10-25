@@ -1,0 +1,20 @@
+name: CI infra
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - '.github/workflows/ci-infra.yml'
+  push:
+    paths:
+      - 'infra/**'
+      - '.github/workflows/ci-infra.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate area
+        run: echo "No automated checks configured yet for infra"

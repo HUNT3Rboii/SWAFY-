@@ -1,0 +1,20 @@
+name: CI packages/map-web
+
+on:
+  pull_request:
+    paths:
+      - 'packages/map-web/**'
+      - '.github/workflows/ci-packages-map-web.yml'
+  push:
+    paths:
+      - 'packages/map-web/**'
+      - '.github/workflows/ci-packages-map-web.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate area
+        run: echo "No automated checks configured yet for packages/map-web"

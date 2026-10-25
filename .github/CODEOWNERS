@@ -1,0 +1,15 @@
+# Global fallback owner
+* @HUNT3Rboii
+
+# Area ownership
+/apps/mobile/ @HUNT3Rboii
+/apps/dashboard/ @HUNT3Rboii
+/apps/api/ @HUNT3Rboii
+/services/vision-worker/ @HUNT3Rboii
+/packages/map-core/ @HUNT3Rboii
+/packages/map-web/ @HUNT3Rboii
+/packages/map-mobile/ @HUNT3Rboii
+/packages/api-client/ @HUNT3Rboii
+/docs/contracts/ @HUNT3Rboii
+/infra/ @HUNT3Rboii
+/.github/ @HUNT3Rboii
