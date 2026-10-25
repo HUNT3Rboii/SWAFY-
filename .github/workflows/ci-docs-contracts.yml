@@ -1,0 +1,23 @@
+name: CI docs/contracts
+
+on:
+  pull_request:
+    paths:
+      - 'docs/contracts/**'
+      - '.github/workflows/ci-docs-contracts.yml'
+  push:
+    paths:
+      - 'docs/contracts/**'
+      - '.github/workflows/ci-docs-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate area
+        run: echo "No automated checks configured yet for docs/contracts"

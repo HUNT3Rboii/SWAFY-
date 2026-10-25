@@ -1,0 +1,23 @@
+name: CI packages/map-mobile
+
+on:
+  pull_request:
+    paths:
+      - 'packages/map-mobile/**'
+      - '.github/workflows/ci-packages-map-mobile.yml'
+  push:
+    paths:
+      - 'packages/map-mobile/**'
+      - '.github/workflows/ci-packages-map-mobile.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate area
+        run: echo "No automated checks configured yet for packages/map-mobile"

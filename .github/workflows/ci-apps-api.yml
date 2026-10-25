@@ -1,0 +1,23 @@
+name: CI apps/api
+
+on:
+  pull_request:
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/ci-apps-api.yml'
+  push:
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/ci-apps-api.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate area
+        run: echo "No automated checks configured yet for apps/api"

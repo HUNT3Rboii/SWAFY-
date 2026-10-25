@@ -1,0 +1,11 @@
+# Repository settings-as-code (applied by GitHub Settings app, if enabled)
+branches:
+  - name: main
+    protection:
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+      required_status_checks:
+        strict: true
+        contexts: []
+      enforce_admins: false
+      restrictions: null

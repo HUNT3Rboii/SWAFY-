@@ -1,0 +1,23 @@
+name: CI packages/api-client
+
+on:
+  pull_request:
+    paths:
+      - 'packages/api-client/**'
+      - '.github/workflows/ci-packages-api-client.yml'
+  push:
+    paths:
+      - 'packages/api-client/**'
+      - '.github/workflows/ci-packages-api-client.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate area
+        run: echo "No automated checks configured yet for packages/api-client"

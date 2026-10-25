@@ -1,0 +1,23 @@
+name: CI packages/map-core
+
+on:
+  pull_request:
+    paths:
+      - 'packages/map-core/**'
+      - '.github/workflows/ci-packages-map-core.yml'
+  push:
+    paths:
+      - 'packages/map-core/**'
+      - '.github/workflows/ci-packages-map-core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate area
+        run: echo "No automated checks configured yet for packages/map-core"

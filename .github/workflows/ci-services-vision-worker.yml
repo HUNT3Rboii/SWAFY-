@@ -1,0 +1,23 @@
+name: CI services/vision-worker
+
+on:
+  pull_request:
+    paths:
+      - 'services/vision-worker/**'
+      - '.github/workflows/ci-services-vision-worker.yml'
+  push:
+    paths:
+      - 'services/vision-worker/**'
+      - '.github/workflows/ci-services-vision-worker.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate area
+        run: echo "No automated checks configured yet for services/vision-worker"
