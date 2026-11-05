@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swafy.local/services/vision-worker/schema.json",
+  "title": "ClassificationResult",
+  "description": "The vision worker never returns a boolean. It returns one of three statuses: safe (publish the photo), unsafe (reject it) or unavailable (leave it pending, ask a human). category is one of the five frozen categories from docs/contracts/enums.md, or 'unknown' which is a worker-only value that is never stored.",
+  "type": "object",
+  "required": ["status", "category", "confidence", "reason"],
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "description": "safe -> photo_state approved; unsafe -> rejected; unavailable -> stays pending_check. unavailable is never treated as safe.",
+      "type": "string",
+      "enum": ["safe", "unsafe", "unavailable"]
+    },
+    "category": {
+      "description": "One of the five frozen categories, or 'unknown' (worker-only, never stored).",
+      "type": "string",
+      "enum": ["pothole", "trash", "graffiti", "broken_light", "other", "unknown"]
+    },
+    "confidence": {
+      "description": "Model confidence, 0.0 to 1.0.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason": {
+      "description": "Short human-readable explanation.",
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}
