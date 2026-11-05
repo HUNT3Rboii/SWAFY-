@@ -1,0 +1,14 @@
+# Local-run compose file for the vision worker.
+# Inside this folder only - NOT added to the shared root compose (that is OPS-2).
+version: "3.9"
+
+services:
+  vision-worker:
+    build: .
+    env_file:
+      - .env.example
+    # Real keys go in a local .env (gitignored), not here.
+    environment:
+      - VISION_PROVIDER=stub
+      - STUB_MODE=safe
+    restart: unless-stopped
