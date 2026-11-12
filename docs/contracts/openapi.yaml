@@ -1,0 +1,1742 @@
+openapi: 3.1.0
+info:
+  title: SWAFY API
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  summary: API contract for SWAFY civic issue reporting.
+  description: 'Version 1 contract for SWAFY, shared by the mobile app, dashboard, API, map components, and vision
+    worker. A Report represents one citizen submission. V1 does not expose a separate canonical Incident resource:
+    nearby returns candidate reports and confirmations attach to a report. A report is private until its photo passes
+    the safety gate. Public report, map, nearby, and export operations MUST return only reports whose photo_state
+    is approved. The category and report-status enums are the frozen PM-1 values.'
+servers:
+  - url: /api/v1
+    description: All paths are relative to this API v1 base URL; clients must not prepend /api or /v1 again.
+tags:
+  - name: Health
+    description: Health and service status endpoints.
+  - name: Authentication
+    description: Account registration, login, and token lifecycle operations.
+  - name: Reports
+    description: Citizen and municipal report management endpoints.
+  - name: Map
+    description: Spatial queries and public map data for approved reports.
+  - name: Exports
+    description: Downloadable CSV and GeoJSON exports for approved reports.
+  - name: Internal worker
+    description: Internal worker endpoints for photo safety claims and results.
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      operationId: healthCheck
+      summary: Check API health
+      security: []
+      responses:
+        '200':
+          description: API is responding.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                properties:
+                  status:
+                    type: string
+                    const: ok
+              example:
+                status: ok
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      operationId: register
+      summary: Register a citizen account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              display_name: Amira Ben Ali
+              email: amira@example.com
+              password: correct-horse-battery
+      responses:
+        '201':
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                user:
+                  id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  display_name: Amira Ben Ali
+                  email: amira@example.com
+                  role: citizen
+                tokens:
+                  access_token: access-token-example
+                  refresh_token: refresh-token-example
+                  token_type: Bearer
+                  expires_in: 900
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      operationId: login
+      summary: Authenticate with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: amira@example.com
+              password: correct-horse-battery
+      responses:
+        '200':
+          description: Authentication succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                user:
+                  id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  display_name: Amira Ben Ali
+                  email: amira@example.com
+                  role: citizen
+                tokens:
+                  access_token: access-token-example
+                  refresh_token: refresh-token-example
+                  token_type: Bearer
+                  expires_in: 900
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      operationId: refreshToken
+      summary: Exchange a refresh token for a new token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Tokens refreshed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                user:
+                  id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  display_name: Amira Ben Ali
+                  email: amira@example.com
+                  role: citizen
+                tokens:
+                  access_token: access-token-example
+                  refresh_token: refresh-token-example
+                  token_type: Bearer
+                  expires_in: 900
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports:
+    post:
+      tags:
+        - Reports
+      operationId: createReport
+      summary: Create a report and obtain a private quarantine upload URL
+      description: 'Creates one citizen report. The citizen supplies the initial category, so the effective category
+        starts with label_source `manual`. The report starts with status `submitted` and photo_state `pending_check`.
+        The returned presigned PUT URL targets the private quarantine bucket. After uploading, the client calls
+        POST /reports/{report_id}/photo/complete. The photo safety check is independent of category suggestion:
+        a safe photo may be published while its AI category suggestion awaits owner confirmation. A report MUST
+        NOT be returned by public list/map/nearby/export operations until photo_state is `approved`.'
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+              description: The citizen-selected category is required by the v1 mobile reporting flow.
+            example:
+              description: Large pothole beside the bus stop.
+              category: pothole
+              latitude: 36.8065
+              longitude: 10.1815
+              photo:
+                filename: pothole.jpg
+                content_type: image/jpeg
+      responses:
+        '201':
+          description: Report created; upload still needs to complete and pass the safety check.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateReportResponse'
+              example:
+                report:
+                  id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  description: Large pothole beside the bus stop.
+                  category: pothole
+                  status: submitted
+                  photo_state: pending_check
+                  label_source: manual
+                  ai_confidence:
+                  latitude: 36.8065
+                  longitude: 10.1815
+                  photo_url:
+                  created_at: '2026-11-12T10:00:00Z'
+                  updated_at: '2026-11-12T10:00:00Z'
+                  suggested_category:
+                  ai_reason:
+                  ai_provider:
+                upload:
+                  method: PUT
+                  url: https://storage.example.com/quarantine/presigned-upload
+                  headers:
+                    Content-Type: image/jpeg
+                  expires_at: '2026-11-12T10:15:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    get:
+      tags:
+        - Reports
+      operationId: listPublicReports
+      summary: List public reports
+      description: "Returns approved reports only. Records whose photo_state is pending_check\nor rejected MUST
+        NEVER appear here, regardless of the requested filters.\n"
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CategoryFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/StartDateFilter'
+        - $ref: '#/components/parameters/EndDateFilter'
+        - $ref: '#/components/parameters/BboxFilter'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of approved public reports.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportPage'
+              example:
+                items: []
+                page: 1
+                page_size: 20
+                total: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/mine:
+    get:
+      tags:
+        - Reports
+      operationId: listMyReports
+      summary: List reports owned by the authenticated citizen
+      description: The owner can see their own reports in pending_check, approved, or rejected photo states.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CategoryFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of the authenticated user's reports.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportPage'
+              example:
+                items:
+                  - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    description: Large pothole beside the bus stop.
+                    category: pothole
+                    status: submitted
+                    photo_state: pending_check
+                    label_source: manual
+                    ai_confidence:
+                    latitude: 36.8065
+                    longitude: 10.1815
+                    photo_url:
+                    created_at: '2026-11-12T10:00:00Z'
+                    updated_at: '2026-11-12T10:00:00Z'
+                page: 1
+                page_size: 20
+                total: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/{report_id}:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    get:
+      tags:
+        - Reports
+      operationId: getReport
+      summary: Get one report
+      description: "A public caller can read an approved report. The report owner and a\nmunicipal_admin can also
+        read the report while its photo is pending or\nrejected. A caller must not gain access to another citizen's
+        private report.\n"
+      security:
+        - BearerAuth: []
+        - {}
+      responses:
+        '200':
+          description: Report details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDetail'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                category: pothole
+                status: submitted
+                photo_state: approved
+                label_source: ai
+                ai_confidence: 0.94
+                latitude: 36.8065
+                longitude: 10.1815
+                photo_url: https://cdn.example.com/reports/3fa85f64/photo.jpg
+                created_at: '2026-11-12T10:00:00Z'
+                updated_at: '2026-11-12T10:05:00Z'
+                status_history: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/{report_id}/photo/complete:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    post:
+      tags:
+        - Reports
+      operationId: completeReportPhotoUpload
+      summary: Notify the API that the quarantine upload completed
+      description: "The API verifies that the expected quarantine object exists and queues it\nfor the safety check.
+        This operation is idempotent for an already completed\nupload. It does not approve the photo or make the
+        report public.\n"
+      security:
+        - BearerAuth: []
+      responses:
+        '202':
+          description: Upload recorded; safety check is pending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                description: Large pothole beside the bus stop.
+                category: pothole
+                status: submitted
+                photo_state: pending_check
+                label_source: manual
+                ai_confidence:
+                latitude: 36.8065
+                longitude: 10.1815
+                photo_url:
+                created_at: '2026-11-12T10:00:00Z'
+                updated_at: '2026-11-12T10:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/{report_id}/category/confirm:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    post:
+      tags:
+        - Reports
+      operationId: confirmReportCategory
+      summary: Confirm the suggested category as the report owner
+      description: Owner-only action, allowed after photo_state is `approved`. A non-null suggested_category 
+        must exist. The API copies suggested_category into category and sets label_source to `ai`. The 
+        suggestion and its confidence/reason/provider remain available for audit. If no usable suggestion 
+        exists, return 409 CATEGORY_SUGGESTION_NOT_AVAILABLE.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Category confirmed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDetail'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                description: Large pothole beside the bus stop.
+                category: pothole
+                status: submitted
+                photo_state: approved
+                label_source: ai
+                ai_confidence: 0.94
+                latitude: 36.8065
+                longitude: 10.1815
+                photo_url: https://cdn.example.com/reports/3fa85f64/photo.jpg
+                created_at: '2026-11-12T10:00:00Z'
+                updated_at: '2026-11-12T10:05:00Z'
+                status_history: []
+                suggested_category: pothole
+                ai_reason: Image contains a road-surface pothole.
+                ai_provider: gemini
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: No AI category suggestion is available to confirm, or the category decision is no 
+            longer applicable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: CATEGORY_SUGGESTION_NOT_AVAILABLE
+                  message: There is no AI category suggestion to confirm.
+                  details:
+                  request_id: req_01HXYZ
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/{report_id}/category:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    patch:
+      tags:
+        - Reports
+      operationId: changeReportCategory
+      summary: Change the category as the report owner
+      description: Owner-only category correction after photo_state is `approved`. The request sets the 
+        effective category. The API sets label_source to `ai_corrected` when a usable AI suggestion exists and
+        the owner chooses a different category; to `ai` when the selected value equals the AI suggestion; or 
+        to `manual` when no AI suggestion exists. Clients must not send label_source, suggested_category, or 
+        ai_confidence.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - category
+              properties:
+                category:
+                  $ref: '#/components/schemas/Category'
+            example:
+              category: trash
+      responses:
+        '200':
+          description: Category updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDetail'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                description: Large pothole beside the bus stop.
+                category: trash
+                status: submitted
+                photo_state: approved
+                label_source: ai_corrected
+                ai_confidence: 0.94
+                latitude: 36.8065
+                longitude: 10.1815
+                photo_url: https://cdn.example.com/reports/3fa85f64/photo.jpg
+                created_at: '2026-11-12T10:00:00Z'
+                updated_at: '2026-11-12T10:10:00Z'
+                status_history: []
+                suggested_category: pothole
+                ai_reason: Image contains a road-surface pothole.
+                ai_provider: gemini
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /map/reports:
+    get:
+      tags:
+        - Map
+      operationId: getMapReports
+      summary: Get approved reports in a bounding box as GeoJSON
+      description: Returns approved reports as a GeoJSON FeatureCollection. bbox order is 
+        west,south,east,north; GeoJSON Point coordinates are longitude,latitude. This public endpoint MUST 
+        include only records with photo_state `approved`.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/BboxFilterRequired'
+        - $ref: '#/components/parameters/CategoryFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+      responses:
+        '200':
+          description: GeoJSON FeatureCollection containing approved reports only.
+          content:
+            application/geo+json:
+              schema:
+                $ref: '#/components/schemas/ReportFeatureCollection'
+              example:
+                type: FeatureCollection
+                features:
+                  - type: Feature
+                    id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    geometry:
+                      type: Point
+                      coordinates:
+                        - 10.1815
+                        - 36.8065
+                    properties:
+                      id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                      category: pothole
+                      status: submitted
+                      created_at: '2026-11-12T10:00:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/nearby:
+    get:
+      tags:
+        - Reports
+      operationId: findNearbyReports
+      summary: Find approved reports of the same category nearby
+      description: Returns candidate approved reports of the same category within the requested radius (30 
+        metres by default). It does not merge reports into a canonical incident. Approved reports only.
+      security: []
+      parameters:
+        - name: latitude
+          in: query
+          required: true
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+        - name: longitude
+          in: query
+          required: true
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+        - name: category
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/Category'
+        - name: radius_m
+          in: query
+          required: false
+          description: Search radius in metres; defaults to 30.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 30
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Nearby approved reports.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportPage'
+              example:
+                items: []
+                page: 1
+                page_size: 20
+                total: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/{report_id}/confirm:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    post:
+      tags:
+        - Reports
+      operationId: confirmReportExists
+      summary: Confirm that the citizen also sees this report
+      description: One confirmation per authenticated citizen per approved report. A confirmation records that
+        the citizen also sees this report; it does not create or merge a separate incident.
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Confirmation recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmationResponse'
+              example:
+                report_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                confirmed: true
+                confirmations_count: 4
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /reports/{report_id}/status:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    patch:
+      tags:
+        - Reports
+      operationId: updateReportStatus
+      summary: Update a report's municipal workflow status
+      description: Municipal_admin only. Allowed forward transitions are submitted -> verified -> in_progress 
+        -> resolved. No backward or reopen transition is defined in v1. The API validates the transition and 
+        records a status-history row. An invalid transition returns 409 INVALID_STATUS_TRANSITION; requesting 
+        the current status again is an idempotent no-op and does not add a history row.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - status
+              properties:
+                status:
+                  $ref: '#/components/schemas/ReportStatus'
+            example:
+              status: verified
+      responses:
+        '200':
+          description: Status updated and history recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDetail'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                description: Large pothole beside the bus stop.
+                category: pothole
+                status: verified
+                photo_state: approved
+                label_source: ai
+                ai_confidence: 0.94
+                latitude: 36.8065
+                longitude: 10.1815
+                photo_url: https://cdn.example.com/reports/3fa85f64/photo.jpg
+                created_at: '2026-11-12T10:00:00Z'
+                updated_at: '2026-11-12T10:20:00Z'
+                status_history:
+                  - from_status: submitted
+                    to_status: verified
+                    changed_at: '2026-11-12T10:20:00Z'
+                    note: Municipal review completed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Invalid status transition.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: INVALID_STATUS_TRANSITION
+                  message: A resolved report cannot transition to in_progress.
+                  details:
+                    from_status: resolved
+                    to_status: in_progress
+                  request_id: req_01HXYZ
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /export/reports.csv:
+    get:
+      tags:
+        - Exports
+      operationId: exportReportsCsv
+      summary: Export filtered reports as CSV
+      description: Municipal_admin only. Uses the same filters as GET /reports and exports approved reports 
+        only.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CategoryFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/StartDateFilter'
+        - $ref: '#/components/parameters/EndDateFilter'
+        - $ref: '#/components/parameters/BboxFilter'
+      responses:
+        '200':
+          description: UTF-8 CSV file.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Attachment filename.
+          content:
+            text/csv:
+              schema:
+                type: string
+              example: "id,category,status,latitude,longitude,created_at\n3fa85f64-5717-4562-b3fc-2c963f66afa6,pothole,submitted,36.8065,10.1815,2026-11-12T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /export/reports.geojson:
+    get:
+      tags:
+        - Exports
+      operationId: exportReportsGeoJson
+      summary: Export filtered reports as GeoJSON
+      description: Municipal_admin only. Uses the same filters as GET /reports and exports approved reports 
+        only.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CategoryFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/StartDateFilter'
+        - $ref: '#/components/parameters/EndDateFilter'
+        - $ref: '#/components/parameters/BboxFilter'
+      responses:
+        '200':
+          description: GeoJSON FeatureCollection file.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Attachment filename.
+          content:
+            application/geo+json:
+              schema:
+                $ref: '#/components/schemas/ReportFeatureCollection'
+              example:
+                type: FeatureCollection
+                features: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /internal/photo-checks/claim:
+    post:
+      tags:
+        - Internal worker
+      operationId: claimPendingPhotoChecks
+      summary: Atomically claim pending photo checks for this worker instance
+      description: "Vision-worker service token only. This is a state-changing claim operation and\ntherefore uses
+        POST, not GET. The API atomically leases eligible jobs to the\nrequesting worker instance; concurrent worker
+        instances MUST NOT receive the\nsame active lease. The API returns a short-lived presigned GET URL to the\n\
+        private quarantine object and a lease token. Expired leases become eligible\nfor another claim. The worker
+        has no database credentials and no public-bucket\naccess. A claim with no eligible jobs returns an empty
+        items array.\n"
+      security:
+        - WorkerServiceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimPhotoChecksRequest'
+            example:
+              worker_instance_id: vision-worker-01
+              limit: 10
+      responses:
+        '200':
+          description: Jobs leased to this worker instance; items may be empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimPhotoChecksResponse'
+              example:
+                items:
+                  - report_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    lease_token: lease-token-example-opaque-secret
+                    lease_expires_at: '2026-11-12T10:02:00Z'
+                    attempt: 1
+                    photo_url: https://storage.example.com/quarantine/presigned-get
+                    photo_url_expires_at: '2026-11-12T10:02:00Z'
+                    created_at: '2026-11-12T10:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /internal/photo-checks/{report_id}/result:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    post:
+      tags:
+        - Internal worker
+      operationId: submitPhotoCheckResult
+      summary: Submit an idempotent photo safety and classification result
+      description: Vision-worker service token only. The request must include the unexpired lease_token 
+        returned by the claim endpoint. The API is the only component allowed to update the database or 
+        copy/delete objects. For `safe`, the API strips EXIF/GPS, creates a thumbnail, copies the photo to 
+        public storage, sets photo_state to `approved`, and stores a category suggestion without silently 
+        replacing the citizen's effective category. For `unsafe`, the API deletes the quarantine object and 
+        sets photo_state to `rejected`. For `unavailable`, photo_state remains `pending_check`; the API 
+        releases the lease and schedules a retry using server-managed backoff. An expired or superseded lease 
+        is rejected with 409. Repeating the same Idempotency-Key and body returns the original result; reusing
+        the key with a different body returns 409.
+      security:
+        - WorkerServiceAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique key for this result submission; reused unchanged on retry.
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhotoCheckResultRequest'
+            example:
+              outcome: safe
+              category: pothole
+              confidence: 0.94
+              reason: Image contains a road-surface pothole.
+              provider: stub
+              lease_token: lease-token-from-claim-opaque-secret-0001
+      responses:
+        '200':
+          description: Result accepted or an identical idempotent replay.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoCheckResultResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: Idempotency key conflict, expired/superseded lease, or result conflicts with an already
+            finalized photo check.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Citizen or municipal_admin access token. Role authorization is enforced by the API.
+    WorkerServiceAuth:
+      type: http
+      scheme: bearer
+      description: Dedicated internal service token for the vision worker; not a citizen JWT.
+  parameters:
+    ReportId:
+      name: report_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CategoryFilter:
+      name: category
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/Category'
+    StatusFilter:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ReportStatus'
+    StartDateFilter:
+      name: start_date
+      in: query
+      required: false
+      description: Inclusive lower bound for created_at (RFC 3339 date-time).
+      schema:
+        type: string
+        format: date-time
+    EndDateFilter:
+      name: end_date
+      in: query
+      required: false
+      description: Inclusive upper bound for created_at (RFC 3339 date-time).
+      schema:
+        type: string
+        format: date-time
+    BboxFilter:
+      name: bbox
+      in: query
+      required: false
+      description: West,south,east,north (longitude,latitude,longitude,latitude).
+      schema:
+        type: string
+        pattern: ^-?\d+(\.\d+)?,-?\d+(\.\d+)?,-?\d+(\.\d+)?,-?\d+(\.\d+)?$
+      example: 10.10,36.70,10.30,36.90
+    BboxFilterRequired:
+      name: bbox
+      in: query
+      required: true
+      description: West,south,east,north (longitude,latitude,longitude,latitude).
+      schema:
+        type: string
+        pattern: ^-?\d+(\.\d+)?,-?\d+(\.\d+)?,-?\d+(\.\d+)?,-?\d+(\.\d+)?$
+      example: 10.10,36.70,10.30,36.90
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+  schemas:
+    Category:
+      type: string
+      enum:
+        - pothole
+        - trash
+        - graffiti
+        - broken_light
+        - other
+    ReportStatus:
+      type: string
+      enum:
+        - submitted
+        - verified
+        - in_progress
+        - resolved
+    PhotoState:
+      type: string
+      enum:
+        - pending_check
+        - approved
+        - rejected
+    UserRole:
+      type: string
+      enum:
+        - citizen
+        - municipal_admin
+    LabelSource:
+      type: string
+      enum:
+        - manual
+        - ai
+        - ai_corrected
+    WorkerOutcome:
+      type: string
+      enum:
+        - safe
+        - unsafe
+        - unavailable
+    WorkerCategory:
+      oneOf:
+        - $ref: '#/components/schemas/Category'
+        - type: string
+          const: unknown
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - display_name
+        - email
+        - password
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 128
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          minLength: 1
+    User:
+      type: object
+      required:
+        - id
+        - display_name
+        - email
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/UserRole'
+    AuthTokens:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          const: Bearer
+        expires_in:
+          type: integer
+          minimum: 1
+          description: Access-token lifetime in seconds.
+    AuthResponse:
+      type: object
+      required:
+        - user
+        - tokens
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        tokens:
+          $ref: '#/components/schemas/AuthTokens'
+    PhotoUploadRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - filename
+        - content_type
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        content_type:
+          type: string
+          enum:
+            - image/jpeg
+            - image/png
+            - image/webp
+    CreateReportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - category
+        - latitude
+        - longitude
+        - photo
+      properties:
+        description:
+          type: string
+          maxLength: 2000
+        category:
+          $ref: '#/components/schemas/Category'
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        photo:
+          $ref: '#/components/schemas/PhotoUploadRequest'
+    PresignedUpload:
+      type: object
+      required:
+        - method
+        - url
+        - headers
+        - expires_at
+      properties:
+        method:
+          type: string
+          const: PUT
+        url:
+          type: string
+          format: uri
+        headers:
+          type: object
+          description: Headers that the client must send exactly as returned.
+          additionalProperties:
+            type: string
+        expires_at:
+          type: string
+          format: date-time
+    CreateReportResponse:
+      type: object
+      required:
+        - report
+        - upload
+      properties:
+        report:
+          $ref: '#/components/schemas/Report'
+        upload:
+          $ref: '#/components/schemas/PresignedUpload'
+    Report:
+      type: object
+      required:
+        - id
+        - category
+        - status
+        - photo_state
+        - label_source
+        - created_at
+        - updated_at
+        - latitude
+        - longitude
+      properties:
+        id:
+          type: string
+          format: uuid
+        description:
+          type:
+            - string
+            - 'null'
+        category:
+          $ref: '#/components/schemas/Category'
+          description: Effective report category. Initially supplied by the citizen; may be replaced when the 
+            owner accepts an AI suggestion.
+        suggested_category:
+          anyOf:
+            - $ref: '#/components/schemas/Category'
+            - type: 'null'
+          description: AI-proposed category awaiting owner confirmation. Null when no usable suggestion 
+            exists.
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        photo_state:
+          $ref: '#/components/schemas/PhotoState'
+        label_source:
+          $ref: '#/components/schemas/LabelSource'
+          description: 'How the effective category was selected: manual, accepted AI suggestion, or owner correction
+            of an AI suggestion.'
+        ai_confidence:
+          type:
+            - number
+            - 'null'
+          minimum: 0
+          maximum: 1
+          description: Confidence associated with the AI category suggestion; null when no usable suggestion 
+            exists.
+        ai_reason:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+          description: Short explanation returned with the AI category suggestion.
+        ai_provider:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+          description: Provider that produced the AI suggestion, such as gemini or groq.
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        photo_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+          description: Present only after approval; never expose quarantine object keys or URLs.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    StatusHistoryEntry:
+      type: object
+      required:
+        - from_status
+        - to_status
+        - changed_at
+      properties:
+        from_status:
+          oneOf:
+            - $ref: '#/components/schemas/ReportStatus'
+            - type: 'null'
+        to_status:
+          $ref: '#/components/schemas/ReportStatus'
+        changed_at:
+          type: string
+          format: date-time
+        note:
+          type:
+            - string
+            - 'null'
+          maxLength: 1000
+    ReportDetail:
+      allOf:
+        - $ref: '#/components/schemas/Report'
+        - type: object
+          properties:
+            status_history:
+              type: array
+              items:
+                $ref: '#/components/schemas/StatusHistoryEntry'
+    ReportPage:
+      type: object
+      required:
+        - items
+        - page
+        - page_size
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Report'
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          minimum: 0
+    GeoJsonPoint:
+      type: object
+      required:
+        - type
+        - coordinates
+      properties:
+        type:
+          type: string
+          const: Point
+        coordinates:
+          type: array
+          prefixItems:
+            - type: number
+              description: Longitude
+            - type: number
+              description: Latitude
+          minItems: 2
+          maxItems: 2
+    ReportFeature:
+      type: object
+      required:
+        - type
+        - id
+        - geometry
+        - properties
+      properties:
+        type:
+          type: string
+          const: Feature
+        id:
+          type: string
+          format: uuid
+        geometry:
+          $ref: '#/components/schemas/GeoJsonPoint'
+        properties:
+          type: object
+          required:
+            - id
+            - category
+            - status
+            - created_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            category:
+              $ref: '#/components/schemas/Category'
+            status:
+              $ref: '#/components/schemas/ReportStatus'
+            created_at:
+              type: string
+              format: date-time
+            confirmations_count:
+              type: integer
+              minimum: 0
+    ReportFeatureCollection:
+      type: object
+      required:
+        - type
+        - features
+      properties:
+        type:
+          type: string
+          const: FeatureCollection
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportFeature'
+    ConfirmationResponse:
+      type: object
+      required:
+        - report_id
+        - confirmed
+        - confirmations_count
+      properties:
+        report_id:
+          type: string
+          format: uuid
+        confirmed:
+          type: boolean
+          const: true
+        confirmations_count:
+          type: integer
+          minimum: 1
+    PhotoCheckResultRequest:
+      type: object
+      required:
+        - lease_token
+        - outcome
+        - category
+        - confidence
+        - reason
+        - provider
+      properties:
+        lease_token:
+          type: string
+          minLength: 32
+          description: Lease credential returned by POST /internal/photo-checks/claim.
+        outcome:
+          $ref: '#/components/schemas/WorkerOutcome'
+        category:
+          $ref: '#/components/schemas/WorkerCategory'
+          description: PM-1 category proposed by the worker, or unknown when no category can be assigned.
+        confidence:
+          type:
+            - number
+            - 'null'
+          minimum: 0
+          maximum: 1
+          description: Worker confidence in its completed decision; must be null for unavailable.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        provider:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Provider identifier (for example gemini, groq, or stub).
+      allOf:
+        - if:
+            properties:
+              outcome:
+                const: unavailable
+          then:
+            properties:
+              category:
+                const: unknown
+              confidence:
+                type: 'null'
+        - if:
+            properties:
+              outcome:
+                const: unsafe
+          then:
+            properties:
+              category:
+                const: unknown
+              confidence:
+                type: number
+                minimum: 0
+                maximum: 1
+      unevaluatedProperties: false
+    
+    PhotoCheckResultResponse:
+      type: object
+      required:
+        - report_id
+        - outcome
+        - photo_state
+        - accepted
+      properties:
+        report_id:
+          type: string
+          format: uuid
+        outcome:
+          $ref: '#/components/schemas/WorkerOutcome'
+        photo_state:
+          $ref: '#/components/schemas/PhotoState'
+        accepted:
+          type: boolean
+        message:
+          type: string
+      description: 'photo_state is server-derived from outcome: safe=approved, unsafe=rejected, unavailable=pending_check.'
+      allOf:
+        - if:
+            properties:
+              outcome:
+                const: safe
+          then:
+            properties:
+              photo_state:
+                const: approved
+        - if:
+            properties:
+              outcome:
+                const: unsafe
+          then:
+            properties:
+              photo_state:
+                const: rejected
+        - if:
+            properties:
+              outcome:
+                const: unavailable
+          then:
+            properties:
+              photo_state:
+                const: pending_check
+      unevaluatedProperties: false
+    Error:
+      type: object
+      required:
+        - code
+        - message
+        - request_id
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+        message:
+          type: string
+          description: Human-readable summary.
+        details:
+          type:
+            - object
+            - 'null'
+          additionalProperties: true
+        request_id:
+          type: string
+          description: Request correlation identifier.
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+    ClaimPhotoChecksRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - worker_instance_id
+      properties:
+        worker_instance_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Stable identifier for this running worker instance, used for lease ownership and logs.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 10
+    LeasedPhotoCheck:
+      type: object
+      required:
+        - report_id
+        - lease_token
+        - lease_expires_at
+        - attempt
+        - photo_url
+        - photo_url_expires_at
+        - created_at
+      properties:
+        report_id:
+          type: string
+          format: uuid
+        lease_token:
+          type: string
+          minLength: 32
+          description: Opaque secret proving ownership of this specific lease; treat as a credential.
+        lease_expires_at:
+          type: string
+          format: date-time
+        attempt:
+          type: integer
+          minimum: 1
+        photo_url:
+          type: string
+          format: uri
+          description: Short-lived presigned GET URL to the private quarantine object.
+        photo_url_expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    ClaimPhotoChecksResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeasedPhotoCheck'
+  responses:
+    BadRequest:
+      description: Malformed query parameters or request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: BAD_REQUEST
+              message: bbox must contain west
+              details:
+                south:
+                east:
+                north:
+              request_id: req_01HXYZ
+    Unauthorized:
+      description: Missing, invalid, or expired credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Authentication is required
+              details:
+              request_id: req_01HXYZ
+    Forbidden:
+      description: Authenticated caller lacks permission for this operation or resource.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: FORBIDDEN
+              message: You cannot access this report
+              details:
+              request_id: req_01HXYZ
+    NotFound:
+      description: Resource does not exist or is not visible to the caller.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Report not found
+              details:
+              request_id: req_01HXYZ
+    Conflict:
+      description: State conflict, duplicate confirmation, invalid transition, or idempotency-key conflict.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: CONFLICT
+              message: This operation conflicts with the current resource state
+              details:
+              request_id: req_01HXYZ
+    ValidationError:
+      description: Request body or parameter validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Request validation failed
+              details:
+                field: latitude
+                issue: Must be between -90 and 90
+              request_id: req_01HXYZ
+    PayloadTooLarge:
+      description: Photo metadata or upload exceeds configured limits.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: PAYLOAD_TOO_LARGE
+              message: Photo exceeds the upload limit
+              details:
+              request_id: req_01HXYZ
+    RateLimited:
+      description: Per-user or system upload limit exceeded.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds before retrying.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: RATE_LIMITED
+              message: Upload limit exceeded
+              details:
+              request_id: req_01HXYZ
+    ServerError:
+      description: Unexpected server-side failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: An unexpected error occurred
+              details:
+              request_id: req_01HXYZ
