@@ -24,4 +24,14 @@ function readApiBaseUrl(): string {
   return value.replace(/\/+$/, '');
 }
 
+/** Server address, without the /api/v1 prefix. Example: http://192.168.1.20:8000 */
 export const API_BASE_URL = readApiBaseUrl();
+
+/** Prefix of every API route, from docs/contracts/openapi.yaml (servers: /api/v1). */
+export const API_PREFIX = '/api/v1';
+
+/**
+ * When true, the app answers API calls itself with fake data (src/api/mock.ts).
+ * Useful while the backend is not running. Set EXPO_PUBLIC_USE_MOCK_API=false to use the real API.
+ */
+export const USE_MOCK_API = process.env.EXPO_PUBLIC_USE_MOCK_API !== 'false';

@@ -29,6 +29,9 @@ Built with React Native, Expo and TypeScript. Part of the SWAFY monorepo (`apps/
    `EXPO_PUBLIC_API_BASE_URL=http://192.168.1.20:8000`.
    `.env.local` is ignored by git.
 
+   `EXPO_PUBLIC_USE_MOCK_API=true` makes the app answer API calls itself with fake data
+   (no backend needed). Set it to `false` to use the real API.
+
 ## Run the app
 
 The map uses native code, so **Expo Go cannot open this app**. Install the SWAFY
@@ -59,7 +62,9 @@ npx eas-cli@latest build --profile development --platform android
 |---|---|
 | `src/app/` | The screens. One file = one screen (Expo Router). |
 | `src/components/` | Reusable pieces (tab bar, themed text, map) |
-| `src/config/env.ts` | Reads `EXPO_PUBLIC_API_BASE_URL`, the only place the API address is defined |
+| `src/config/env.ts` | Reads `EXPO_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_USE_MOCK_API` |
+| `src/api/` | API calls (`auth.ts`), fake answers (`mock.ts`), types from the OpenAPI contract |
+| `src/auth/` | Who is logged in (`auth-context.tsx`) and the tokens saved in SecureStore |
 | `eas.json` | Build profiles (development, preview, production) |
 
 ## Rules
