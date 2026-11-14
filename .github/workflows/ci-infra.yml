@@ -16,8 +16,28 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Validate area
-        run: echo "No automated checks configured yet for infra"
+
+      - name: Use example env
+        run: cp .env.example .env
+
+      - name: Validate compose file
+        run: docker compose config --quiet
+
+      - name: Start database and storage
+        run: docker compose up --detach --wait db minio
+
+      - name: Create buckets
+        run: docker compose run --rm minio-init
+
+      - name: PostGIS available
+        run: docker compose exec -T db psql -U swafy -d swafy -tAc "SELECT postgis_version();"
+
+      - name: Stop
+        if: always()
+        run: docker compose down --volumes

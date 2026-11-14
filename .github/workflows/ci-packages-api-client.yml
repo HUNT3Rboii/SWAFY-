@@ -4,10 +4,12 @@ on:
   pull_request:
     paths:
       - 'packages/api-client/**'
+      - 'docs/contracts/openapi.yaml'
       - '.github/workflows/ci-packages-api-client.yml'
   push:
     paths:
       - 'packages/api-client/**'
+      - 'docs/contracts/openapi.yaml'
       - '.github/workflows/ci-packages-api-client.yml'
 
 permissions:
@@ -16,8 +18,34 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/api-client
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Validate area
-        run: echo "No automated checks configured yet for packages/api-client"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/api-client/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Generated client matches the contract
+        run: |
+          if [ ! -f ../../docs/contracts/openapi.yaml ]; then
+            echo "::warning::docs/contracts/openapi.yaml not found, skipping freshness check"
+            exit 0
+          fi
+          npm run generate
+          if ! git diff --exit-code -- src/schema.ts; then
+            echo "::error::packages/api-client is out of date. Run 'npm run generate' in packages/api-client and commit src/schema.ts."
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: npm run typecheck
