@@ -7,3 +7,6 @@
 
 node_modules/
 .DS_Store
+
+# Local backups made by the production stack
+infra/backups/

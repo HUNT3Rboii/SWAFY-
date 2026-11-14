@@ -79,6 +79,10 @@ const api = createApiClient({ baseUrl: API_BASE_URL, getToken: () => accessToken
 const { data, error } = await api.GET('/reports/mine');
 ```
 
+## Deploy
+
+See [infra/DEPLOY.md](infra/DEPLOY.md): Docker on one machine, HTTPS through a Cloudflare tunnel, nightly backups.
+
 ## Team rules
 
 See [docs/WORKING_AGREEMENT.md](docs/WORKING_AGREEMENT.md).
