@@ -102,7 +102,9 @@ jobs:
             services="$services api"
             echo "API_BUILT=true" >> "$GITHUB_ENV"
           fi
-          docker compose -f docker-compose.prod.yml --env-file prod.env up -d --wait $services
+          docker compose -f docker-compose.prod.yml --env-file prod.env up -d $services
+          # minio-init is a one-time job: check it finished without error
+          docker compose -f docker-compose.prod.yml --env-file prod.env wait minio-init
 
       - name: Smoke test
         run: |
