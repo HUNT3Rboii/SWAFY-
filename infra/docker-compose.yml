@@ -50,7 +50,7 @@ services:
 
   # Creates the buckets once MinIO is up, then exits.
   #   quarantine: private, photos waiting for the safety check
-  #   public:     anyone can download, approved photos only
+  #   public:     anyone can open a photo by URL (no listing), approved photos only
   minio-init:
     image: pgsty/mc:RELEASE.2026-11-12T00-00-00Z
     depends_on:
@@ -66,7 +66,9 @@ services:
         mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
         mc mb --ignore-existing local/quarantine local/public
         mc anonymous set none local/quarantine
-        mc anonymous set download local/public
+        # Anyone can open a photo by its URL, but nobody can list the bucket.
+        echo '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::public/*"]}]}' > /tmp/public.json
+        mc anonymous set-json /tmp/public.json local/public
         echo "Buckets ready: quarantine (private), public (download)"
 
   # Fake API that answers with the examples from the OpenAPI contract.

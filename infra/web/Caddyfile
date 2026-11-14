@@ -1,0 +1,48 @@
+# HTTPS is handled by the Cloudflare tunnel; Caddy listens on plain :80 inside Docker.
+{
+	auto_https off
+	admin off
+}
+
+:80 {
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# Smoke test endpoint
+	handle /health {
+		rewrite * /api/v1/health
+		reverse_proxy api:8000
+	}
+
+	handle /api/* {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy api:8000
+	}
+
+	# Photo uploads/downloads. The API signs URLs for https://<public host>/<bucket>/<key>;
+	# the Host header is passed through unchanged so the signatures stay valid.
+	@photos path /quarantine/* /public/*
+	handle @photos {
+		request_body {
+			max_size {$MAX_UPLOAD_SIZE:10MB}
+		}
+		reverse_proxy minio:9000
+	}
+
+	# Dashboard (single-page app)
+	handle {
+		root * /srv/dashboard
+		try_files {path} /index.html
+		file_server
+	}
+}
