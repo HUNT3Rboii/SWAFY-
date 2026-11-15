@@ -170,6 +170,34 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '500':
           $ref: '#/components/responses/ServerError'
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      operationId: logout
+      summary: Log out by revoking a refresh token
+      description: Revokes the given refresh token so it can no longer be exchanged for new tokens. The client
+        also deletes its stored tokens. The access token stays valid until it expires (expires_in). Logging out
+        with a token that is already revoked or unknown still returns 204.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            example:
+              refresh_token: refresh-token-example
+      responses:
+        '204':
+          description: Logged out; the refresh token is revoked.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
   /reports:
     post:
       tags:
@@ -199,6 +227,7 @@ paths:
               photo:
                 filename: pothole.jpg
                 content_type: image/jpeg
+                size_bytes: 2457600
       responses:
         '201':
           description: Report created; upload still needs to complete and pass the safety check.
@@ -909,6 +938,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PhotoCheckResultResponse'
+              example:
+                report_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                outcome: safe
+                photo_state: approved
+                accepted: true
+                message: Photo approved and published.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1147,6 +1182,7 @@ components:
       required:
         - filename
         - content_type
+        - size_bytes
       properties:
         filename:
           type: string
@@ -1158,6 +1194,12 @@ components:
             - image/jpeg
             - image/png
             - image/webp
+        size_bytes:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+          description: Exact photo size in bytes (max 10 MB). The API signs it into the upload URL as
+            Content-Length, so a different-sized upload is rejected. Larger photos get 413.
     CreateReportRequest:
       type: object
       additionalProperties: false
@@ -1631,11 +1673,10 @@ components:
           example:
             error:
               code: BAD_REQUEST
-              message: bbox must contain west
+              message: 'bbox must be four numbers: west,south,east,north'
               details:
-                south:
-                east:
-                north:
+                parameter: bbox
+                value: 10.10,36.70
               request_id: req_01HXYZ
     Unauthorized:
       description: Missing, invalid, or expired credentials.

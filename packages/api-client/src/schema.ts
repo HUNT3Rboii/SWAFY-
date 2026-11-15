@@ -72,6 +72,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log out by revoking a refresh token
+         * @description Revokes the given refresh token so it can no longer be exchanged for new tokens. The client also deletes its stored tokens. The access token stays valid until it expires (expires_in). Logging out with a token that is already revoked or unknown still returns 204.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports": {
         parameters: {
             query?: never;
@@ -438,6 +458,8 @@ export interface components {
             filename: string;
             /** @enum {string} */
             content_type: "image/jpeg" | "image/png" | "image/webp";
+            /** @description Exact photo size in bytes (max 10 MB). The API signs it into the upload URL as Content-Length, so a different-sized upload is rejected. Larger photos get 413. */
+            size_bytes: number;
         };
         CreateReportRequest: {
             description?: string;
@@ -618,11 +640,10 @@ export interface components {
                  * @example {
                  *       "error": {
                  *         "code": "BAD_REQUEST",
-                 *         "message": "bbox must contain west",
+                 *         "message": "bbox must be four numbers: west,south,east,north",
                  *         "details": {
-                 *           "south": null,
-                 *           "east": null,
-                 *           "north": null
+                 *           "parameter": "bbox",
+                 *           "value": "10.10,36.70"
                  *         },
                  *         "request_id": "req_01HXYZ"
                  *       }
@@ -987,6 +1008,36 @@ export interface operations {
             500: components["responses"]["ServerError"];
         };
     };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "refresh_token": "refresh-token-example"
+                 *     }
+                 */
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description Logged out; the refresh token is revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["ServerError"];
+        };
+    };
     listPublicReports: {
         parameters: {
             query?: {
@@ -1049,7 +1100,8 @@ export interface operations {
                  *       "longitude": 10.1815,
                  *       "photo": {
                  *         "filename": "pothole.jpg",
-                 *         "content_type": "image/jpeg"
+                 *         "content_type": "image/jpeg",
+                 *         "size_bytes": 2457600
                  *       }
                  *     }
                  */
@@ -1744,6 +1796,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "report_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                     *       "outcome": "safe",
+                     *       "photo_state": "approved",
+                     *       "accepted": true,
+                     *       "message": "Photo approved and published."
+                     *     }
+                     */
                     "application/json": components["schemas"]["PhotoCheckResultResponse"];
                 };
             };
