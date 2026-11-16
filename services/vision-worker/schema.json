@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swafy.local/services/vision-worker/schema.json",
+  "title": "ClassificationResult",
+  "description": "Result of classify(image). Matches the decision fields of PhotoCheckResultRequest in docs/contracts/openapi.yaml (BE-1); lease_token is added by the transport layer, not here. The worker never returns a boolean: outcome is safe (publish), unsafe (reject) or unavailable (stay pending_check, retry later). unavailable is never treated as safe.",
+  "type": "object",
+  "required": ["outcome", "category", "confidence", "reason", "provider"],
+  "additionalProperties": false,
+  "properties": {
+    "outcome": {
+      "description": "safe -> photo_state approved; unsafe -> rejected; unavailable -> stays pending_check.",
+      "type": "string",
+      "enum": ["safe", "unsafe", "unavailable"]
+    },
+    "category": {
+      "description": "One of the five frozen categories (docs/contracts/enums.md), or 'unknown' (worker-only: the user picks).",
+      "type": "string",
+      "enum": ["pothole", "trash", "graffiti", "broken_light", "other", "unknown"]
+    },
+    "confidence": {
+      "description": "Confidence in the completed decision, 0 to 1. Must be null when outcome is unavailable.",
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason": {
+      "description": "Short human-readable explanation.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "provider": {
+      "description": "Which provider produced the result: stub, gemini, groq, or none if no provider could run.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"outcome": {"const": "unavailable"}}},
+      "then": {"properties": {"category": {"const": "unknown"}, "confidence": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "unsafe"}}},
+      "then": {"properties": {"category": {"const": "unknown"}, "confidence": {"type": "number"}}}
+    },
+    {
+      "if": {"properties": {"outcome": {"const": "safe"}}},
+      "then": {"properties": {"confidence": {"type": "number"}}}
+    }
+  ]
+}
