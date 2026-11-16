@@ -22,3 +22,8 @@ htmlcov/
 # Tests generate their own images with Pillow instead of committing files,
 # so only the dedicated evaluation folder is blocked, never *.jpg / *.png.
 eval/photos/
+
+ANALYSIS.md
+CLAUDE.md
+INTEGRATION_NOTES.md
+SUMMARY.md
