@@ -36,6 +36,18 @@ that builds this folder and reads `infra/env/worker.env`. Nothing to change
 there for AI-1: with no `VISION_PROVIDER` / `STUB_MODE` in that file the
 worker starts with the stub in `safe` mode and logs a startup warning.
 
+Verified 2026-11-16 (worker only, no backend needed):
+
+```
+cd infra
+docker compose --env-file .env.example --profile api --profile worker up --build --no-deps worker
+```
+
+Note for the owner of `infra/docker-compose.yml`: `--profile worker` alone
+fails with `service "worker" depends on undefined service "api"`, because
+`api` is behind its own profile. Either always pass both profiles (as the
+root README does) or drop/relax `depends_on: api` until BE-4 exists.
+
 Request for the owner of `infra/env/worker.env.example`: add these lines so
 the options are visible:
 
