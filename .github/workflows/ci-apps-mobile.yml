@@ -16,8 +16,29 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Validate area
-        run: echo "No automated checks configured yet for apps/mobile"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Expo normally creates this file on first `expo start`; it is git-ignored.
+      - name: Expo type references
+        run: echo '/// <reference types="expo/types" />' > expo-env.d.ts
+
+      # Not blocking yet: one known error from the Expo template
+      # (src/components/app-tabs.web.tsx). Remove `continue-on-error` once it is fixed.
+      - name: Typecheck
+        continue-on-error: true
+        run: npx tsc --noEmit
