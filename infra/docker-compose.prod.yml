@@ -1,0 +1,156 @@
+# SWAFY production stack, run on any machine with Docker (see infra/DEPLOY.md).
+#
+#   cd infra
+#   cp prod.env.example prod.env          # then change every CHANGE_ME
+#   docker compose -f docker-compose.prod.yml --env-file prod.env pull
+#   docker compose -f docker-compose.prod.yml --env-file prod.env up -d
+#
+# Only `web` is reachable: on http://localhost:8080 from this machine, and over
+# HTTPS through the Cloudflare tunnel. The database and MinIO have no open ports.
+
+name: swafy-prod
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  db:
+    <<: *restart
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-swafy}
+      POSTGRES_USER: ${POSTGRES_USER:-swafy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in prod.env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    <<: *restart
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-swafy}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in prod.env}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-11-12T00-00-00Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-swafy}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/quarantine local/public
+        mc anonymous set none local/quarantine
+        # Anyone can open a photo by its URL, but nobody can list the bucket.
+        echo '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::public/*"]}]}' > /tmp/public.json
+        mc anonymous set-json /tmp/public.json local/public
+
+  api:
+    <<: *restart
+    image: ${IMAGE_PREFIX:-ghcr.io/hunt3rboii/swafy}-api:${IMAGE_TAG:-latest}
+    env_file: env/api.prod.env
+    depends_on:
+      db:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *restart
+    image: ${IMAGE_PREFIX:-ghcr.io/hunt3rboii/swafy}-worker:${IMAGE_TAG:-latest}
+    env_file: env/worker.prod.env
+    depends_on:
+      - api
+
+  # Caddy: serves the dashboard, proxies /api and photo URLs, adds security headers.
+  web:
+    <<: *restart
+    image: ${IMAGE_PREFIX:-ghcr.io/hunt3rboii/swafy}-web:${IMAGE_TAG:-latest}
+    environment:
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10MB}
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+
+  # Free HTTPS address (https://<random>.trycloudflare.com) pointing at `web`.
+  # The address is printed in the logs and CHANGES every time this restarts:
+  #   docker compose -f docker-compose.prod.yml --env-file prod.env logs tunnel | grep trycloudflare
+  tunnel:
+    <<: *restart
+    image: cloudflare/cloudflared:2026.10.0
+    command: tunnel --no-autoupdate --url http://web:80
+    depends_on:
+      - web
+
+  # Nightly database dump to BACKUP_DIR, keeps the last 7.
+  db-backup:
+    <<: *restart
+    image: postgis/postgis:16-3.4
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGDATABASE: ${POSTGRES_DB:-swafy}
+      PGUSER: ${POSTGRES_USER:-swafy}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ${BACKUP_DIR:?set BACKUP_DIR in prod.env}:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mkdir -p /backups/db
+        while true; do
+          file=/backups/db/swafy-$$(date +%Y%m%d-%H%M%S).dump
+          if pg_dump -Fc -f "$$file.tmp"; then
+            mv "$$file.tmp" "$$file" && echo "backup ok: $$file"
+          else
+            rm -f "$$file.tmp"; echo "backup FAILED"
+          fi
+          ls -1t /backups/db/*.dump | tail -n +8 | xargs -r rm -f
+          sleep 86400
+        done
+
+  # Nightly copy of both photo buckets to BACKUP_DIR.
+  photo-backup:
+    <<: *restart
+    image: pgsty/mc:RELEASE.2026-11-12T00-00-00Z
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-swafy}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ${BACKUP_DIR}:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+        while true; do
+          mc mirror --quiet --overwrite local/public /backups/photos/public &&
+          mc mirror --quiet --overwrite local/quarantine /backups/photos/quarantine &&
+          echo "photo backup ok: $$(date)" || echo "photo backup FAILED"
+          sleep 86400
+        done
+
+volumes:
+  db-data:
+  minio-data:

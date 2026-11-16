@@ -1,0 +1,111 @@
+# SWAFY development stack.
+#
+#   cd infra
+#   cp .env.example .env
+#   docker compose up
+#
+# Services started by default: db, minio (+ bucket setup), mock-api.
+# The real api and worker are placeholders until BE-2 / AI-1 add their
+# Dockerfiles; start them with:  docker compose --profile api --profile worker up
+
+name: swafy
+
+services:
+  # PostgreSQL + PostGIS
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-swafy}
+      POSTGRES_USER: ${POSTGRES_USER:-swafy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy infra/.env.example to infra/.env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # S3-compatible photo storage. Console: http://localhost:9001
+  # MinIO stopped publishing official images in 2025; pgsty/* is a maintained
+  # community build of the same server and client.
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-swafy}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?copy infra/.env.example to infra/.env}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Creates the buckets once MinIO is up, then exits.
+  #   quarantine: private, photos waiting for the safety check
+  #   public:     anyone can open a photo by URL (no listing), approved photos only
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-11-12T00-00-00Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-swafy}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/quarantine local/public
+        mc anonymous set none local/quarantine
+        # Anyone can open a photo by its URL, but nobody can list the bucket.
+        echo '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::public/*"]}]}' > /tmp/public.json
+        mc anonymous set-json /tmp/public.json local/public
+        echo "Buckets ready: quarantine (private), public (download)"
+
+  # Fake API that answers with the examples from the OpenAPI contract.
+  # Reloads automatically when docs/contracts/openapi.yaml changes.
+  mock-api:
+    image: stoplight/prism:5
+    command: mock -h 0.0.0.0 -p 4010 -m false /contract/openapi.yaml
+    volumes:
+      - ../docs/contracts:/contract:ro
+    ports:
+      - "${MOCK_API_PORT:-4010}:4010"
+
+  # Placeholder: real API (BE-2 adds apps/api/Dockerfile).
+  api:
+    profiles: ["api"]
+    build: ../apps/api
+    env_file:
+      - path: env/api.env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  # Placeholder: vision worker (AI-1 adds services/vision-worker/Dockerfile).
+  worker:
+    profiles: ["worker"]
+    build: ../services/vision-worker
+    env_file:
+      - path: env/worker.env
+        required: false
+    depends_on:
+      - api
+
+volumes:
+  db-data:
+  minio-data:
