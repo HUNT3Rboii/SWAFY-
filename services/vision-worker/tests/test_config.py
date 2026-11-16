@@ -25,3 +25,15 @@ def test_stub_mode_selectable():
 def test_provider_set_with_key_is_not_stub():
     cfg = Config.from_env({"VISION_PROVIDER": "gemini", "GEMINI_API_KEY": "abc"})
     assert cfg.use_stub is False
+
+def test_blank_values_fall_back_to_defaults():
+    cfg = Config.from_env({"VISION_PROVIDER": "  ", "STUB_MODE": ""})
+    assert cfg.provider == "stub"
+    assert cfg.stub_mode == "safe"
+
+
+def test_values_are_normalised():
+    cfg = Config.from_env({"VISION_PROVIDER": " Stub ", "STUB_MODE": "UNSAFE", "LOG_LEVEL": "DEBUG"})
+    assert cfg.provider == "stub"
+    assert cfg.stub_mode == "unsafe"
+    assert cfg.log_level == "debug"
