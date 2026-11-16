@@ -104,7 +104,9 @@ services:
       - path: env/worker.env
         required: false
     depends_on:
-      - api
+      api:
+        condition: service_started
+        required: false  # the api service is behind its own profile
 
 volumes:
   db-data:
