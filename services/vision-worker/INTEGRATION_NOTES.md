@@ -12,9 +12,10 @@ and its tests load it from there). It is aligned with BE-1: it equals the
 decision fields of `PhotoCheckResultRequest` in `docs/contracts/openapi.yaml`
 (everything except `lease_token`, which the BE-4 transport layer adds).
 
-Request: copy it to `docs/contracts/vision-classify.schema.json` (owner of
-`docs/contracts/`), or simply point to `PhotoCheckResultRequest` in
-`openapi.yaml`, which already says the same thing. Contract summary:
+Decision: no separate copy. The contract in `docs/contracts/` is
+`PhotoCheckResultRequest` in `openapi.yaml` (written by BE-1). The worker's
+`schema.json` is an identical copy of its decision fields, used only for the
+worker's own validation. Contract summary:
 
 | field        | type           | values                                                              |
 |--------------|----------------|---------------------------------------------------------------------|
