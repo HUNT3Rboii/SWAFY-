@@ -50,7 +50,7 @@ def build_provider(cfg: Config) -> Provider:
 def classify(image_path: str, provider: Provider | None = None) -> ClassificationResult:
     """Classify the image at image_path.
 
-    Never raises: any exception becomes ClassificationResult(status=unavailable).
+    Never raises: any exception becomes ClassificationResult(outcome=unavailable).
     Invalid model output counts as failure -> unavailable.
     """
     try:
@@ -58,39 +58,46 @@ def classify(image_path: str, provider: Provider | None = None) -> Classificatio
             provider = build_provider(Config.from_env())
     except Exception as exc:  # noqa: BLE001 - fail closed: bad config -> unavailable
         logger.error("cannot build provider: %s", exc)
-        return _unavailable("provider not configured")
+        return _unavailable("provider not configured", provider="none")
 
-    name = type(provider).__name__
+    name = getattr(provider, "name", None) or type(provider).__name__
 
     try:
-        payload = provider.classify(image_path)
+        payload = dict(provider.classify(image_path))
     except Exception as exc:  # noqa: BLE001 - fail closed: any provider crash -> unavailable
         logger.exception("provider %s raised during classify: %s", name, exc)
-        return _unavailable("provider failed")
+        return _unavailable("provider failed", provider=name)
+
+    # The worker, not the model, says which provider answered.
+    payload["provider"] = name
 
     # Model output is untrusted: validate it against the schema.
     try:
         result = validate_dict(payload)
     except Exception as exc:  # noqa: BLE001 - invalid output -> unavailable
         logger.error("provider %s returned invalid output: %s", name, exc)
-        return _unavailable("invalid model output")
+        return _unavailable("invalid model output", provider=name)
 
     # Every decision is logged (result + provider) for later evaluation.
     logger.info(
-        "classified | provider=%s status=%s category=%s confidence=%.2f",
-        name,
-        result.status,
+        "classified | provider=%s outcome=%s category=%s confidence=%s",
+        result.provider,
+        result.outcome,
         result.category,
         result.confidence,
     )
     return result
 
 
-def _unavailable(reason: str) -> ClassificationResult:
-    """Build an unavailable result. unavailable is never treated as safe."""
+def _unavailable(reason: str, provider: str) -> ClassificationResult:
+    """Build an unavailable result. unavailable is never treated as safe.
+
+    BE-1 rule: unavailable always has category unknown and confidence null.
+    """
     return ClassificationResult(
-        status="unavailable",
+        outcome="unavailable",
         category="unknown",
-        confidence=0.0,
+        confidence=None,
         reason=reason,
+        provider=provider,
     )

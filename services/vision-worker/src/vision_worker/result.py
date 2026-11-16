@@ -1,22 +1,21 @@
 """Classification result type and JSON-schema validation.
 
-Every classify() result validates against services/vision-worker/schema.json.
-Invalid output counts as a failure (unavailable), never as a guess.
+Every classify() result validates against services/vision-worker/schema.json,
+which matches the decision fields of PhotoCheckResultRequest in
+docs/contracts/openapi.yaml (BE-1). Invalid output counts as a failure
+(unavailable), never as a guess.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import jsonschema
 
-_STATUS = {"safe", "unsafe", "unavailable"}
-_CATEGORY = {"pothole", "trash", "graffiti", "broken_light", "other", "unknown"}
-
 # Load the committed schema once so the worker and the tests share one source
-# of truth. The schema lives in this service (not docs/) and stays here.
+# of truth.
 _SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "schema.json"
 
 with open(_SCHEMA_PATH, "r", encoding="utf-8") as _fh:
@@ -26,36 +25,46 @@ with open(_SCHEMA_PATH, "r", encoding="utf-8") as _fh:
 class ClassificationResult:
     """Result of classifying a single photo.
 
-    status   : "safe" | "unsafe" | "unavailable"
-    category : one of the five frozen categories, or "unknown" (worker-only)
-    confidence: 0.0 to 1.0
-    reason   : short human-readable explanation
+    outcome    : "safe" | "unsafe" | "unavailable"
+    category   : one of the five frozen categories, or "unknown" (worker-only)
+    confidence : 0.0 to 1.0, or None when outcome is "unavailable"
+    reason     : short human-readable explanation
+    provider   : "stub" | "gemini" | "groq" | "none"
     """
 
-    __slots__ = ("status", "category", "confidence", "reason")
+    __slots__ = ("outcome", "category", "confidence", "reason", "provider")
 
-    def __init__(self, status: str, category: str, confidence: float, reason: str) -> None:
-        self.status = status
+    def __init__(
+        self,
+        outcome: str,
+        category: str,
+        confidence: Optional[float],
+        reason: str,
+        provider: str,
+    ) -> None:
+        self.outcome = outcome
         self.category = category
         self.confidence = confidence
         self.reason = reason
+        self.provider = provider
 
     def __repr__(self) -> str:
         return (
-            f"ClassificationResult(status={self.status!r}, category={self.category!r}, "
-            f"confidence={self.confidence!r}, reason={self.reason!r})"
+            f"ClassificationResult(outcome={self.outcome!r}, category={self.category!r}, "
+            f"confidence={self.confidence!r}, reason={self.reason!r}, provider={self.provider!r})"
         )
 
     def as_dict(self) -> Dict[str, Any]:
         return {
-            "status": self.status,
+            "outcome": self.outcome,
             "category": self.category,
             "confidence": self.confidence,
             "reason": self.reason,
+            "provider": self.provider,
         }
 
     def validate(self) -> None:
-        """Validate this result against schema.json. Raises jsonschema.ValidationError on failure."""
+        """Validate against schema.json. Raises jsonschema.ValidationError on failure."""
         jsonschema.validate(self.as_dict(), _SCHEMA)
 
 
@@ -65,9 +74,11 @@ def validate_dict(payload: Dict[str, Any]) -> ClassificationResult:
     Raises jsonschema.ValidationError if the payload does not conform.
     """
     jsonschema.validate(payload, _SCHEMA)
+    confidence = payload["confidence"]
     return ClassificationResult(
-        status=payload["status"],
+        outcome=payload["outcome"],
         category=payload["category"],
-        confidence=float(payload["confidence"]),
+        confidence=None if confidence is None else float(confidence),
         reason=str(payload["reason"]),
+        provider=str(payload["provider"]),
     )

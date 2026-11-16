@@ -8,52 +8,48 @@ those folders myself (team rule); each item below is a request for its owner
 
 The AI-1 issue asks for the classify schema under `docs/contracts/`.
 The source of truth today is `services/vision-worker/schema.json` (the worker
-and its tests load it from there).
+and its tests load it from there). It is aligned with BE-1: it equals the
+decision fields of `PhotoCheckResultRequest` in `docs/contracts/openapi.yaml`
+(everything except `lease_token`, which the BE-4 transport layer adds).
 
 Request: copy it to `docs/contracts/vision-classify.schema.json` (owner of
-`docs/contracts/`). Until then, backend and mobile can read the file in this
-folder. Contract summary:
+`docs/contracts/`), or simply point to `PhotoCheckResultRequest` in
+`openapi.yaml`, which already says the same thing. Contract summary:
 
-| field        | type   | values                                                         |
-|--------------|--------|----------------------------------------------------------------|
-| `status`     | string | `safe` / `unsafe` / `unavailable` (never a boolean)             |
-| `category`   | string | `pothole`, `trash`, `graffiti`, `broken_light`, `other`, `unknown` |
-| `confidence` | number | 0 to 1                                                         |
-| `reason`     | string | non-empty                                                      |
+| field        | type           | values                                                              |
+|--------------|----------------|---------------------------------------------------------------------|
+| `outcome`    | string         | `safe` / `unsafe` / `unavailable` (never a boolean)                  |
+| `category`   | string         | `pothole`, `trash`, `graffiti`, `broken_light`, `other`, `unknown`   |
+| `confidence` | number or null | 0 to 1; `null` when `unavailable`                                    |
+| `reason`     | string         | 1 to 2000 chars                                                      |
+| `provider`   | string         | `stub`, `gemini`, `groq`, or `none` (no provider could run)          |
 
-Mapping to the frozen `photo_state` (from `docs/contracts/enums.md`):
+Rules: `unsafe` and `unavailable` always use category `unknown`.
+Mapping to `photo_state` (done by the API): `safe` -> `approved`,
+`unsafe` -> `rejected`, `unavailable` -> stays `pending_check` (retried,
+**never** published).
 
-- `safe` -> `approved`
-- `unsafe` -> `rejected`
-- `unavailable` -> stays `pending_check` (retried later, **never** published)
+## 2. Root compose (OPS-2, already merged)
 
-`unknown` is a worker-only category meaning "ask the user to pick". It is never
-stored.
+`infra/docker-compose.yml` already has a `worker` service (profile `worker`)
+that builds this folder and reads `infra/env/worker.env`. Nothing to change
+there for AI-1: with no `VISION_PROVIDER` / `STUB_MODE` in that file the
+worker starts with the stub in `safe` mode and logs a startup warning.
 
-## 2. Root compose entry (OPS-2)
+Request for the owner of `infra/env/worker.env.example`: add these lines so
+the options are visible:
 
-Suggested service block for the shared compose file (owner of `infra/` / root
-compose). It starts cleanly with no API key (stub provider, safe mode):
-
-```yaml
-  vision-worker:
-    build: ./services/vision-worker
-    environment:
-      VISION_PROVIDER: ${VISION_PROVIDER:-stub}
-      STUB_MODE: ${STUB_MODE:-safe}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-    restart: unless-stopped
+```
+# stub | gemini | groq  (stub approves everything: dev only)
+VISION_PROVIDER=stub
+# stub only: safe | unsafe | unavailable | error
+STUB_MODE=safe
+LOG_LEVEL=info
 ```
 
-No ports: the worker does not serve HTTP. How it receives jobs depends on
-BE-4 (not decided yet).
-
-**Production warning:** the default `stub` + `safe` approves every photo
-without checking it. The worker logs a WARNING at startup when the stub is on.
-Production must set `VISION_PROVIDER=gemini` (once AI-2 lands). A real
-provider with a missing key gives `unavailable` (fail closed), never `safe`.
+`infra/env/worker.prod.env.example` should set `VISION_PROVIDER=gemini` once
+AI-2 lands. A real provider with a missing key gives `unavailable` (fail
+closed), never `safe`.
 
 ## 3. CI pytest job (`.github/workflows/ci-services-vision-worker.yml`)
 

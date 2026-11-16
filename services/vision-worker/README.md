@@ -1,10 +1,15 @@
 # Vision worker
 
 Classifies report photos with hosted vision LLMs (Gemini primary, Groq fallback).
-The worker never returns a boolean: `classify(image)` returns `status` of
+The worker never returns a boolean: `classify(image)` returns `outcome` of
 `safe`, `unsafe`, or `unavailable` (fail closed — a broken checker never
 approves a photo). `category` is one of the five frozen categories from
 `docs/contracts/enums.md`, or `unknown` (worker-only, never stored).
+
+Result fields (`schema.json`) match the decision part of
+`PhotoCheckResultRequest` in `docs/contracts/openapi.yaml` (BE-1):
+`outcome`, `category`, `confidence` (0-1, `null` when unavailable), `reason`,
+`provider`. Unsafe and unavailable results always use category `unknown`.
 
 ## Phase 1 (AI-1)
 
