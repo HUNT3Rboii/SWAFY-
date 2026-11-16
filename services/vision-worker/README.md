@@ -9,7 +9,7 @@ approves a photo). `category` is one of the five frozen categories from
 ## Phase 1 (AI-1)
 
 - Service config from environment variables + logging (`config.py`, `log_setup.py`).
-- JSON schema of the classify result, committed here (`schema.json`).
+- JSON schema of the classify result, committed here (`schema.json`); see `INTEGRATION_NOTES.md` for the `docs/contracts/` copy.
 - `classify()` and result type with fail-closed behaviour.
 - Stub provider with canned safe/unsafe/unavailable/error results, selectable via `STUB_MODE`.
 - Dockerfile (non-root user) + local docker-compose.yml (folder only).
@@ -28,6 +28,7 @@ Docker:
 docker compose up
 # or, to force a stub mode:
 STUB_MODE=unsafe docker compose up --build
+# a real provider without its key gives "unavailable", never "safe"
 ```
 
 No real API key is required: the service starts cleanly with the stub provider.

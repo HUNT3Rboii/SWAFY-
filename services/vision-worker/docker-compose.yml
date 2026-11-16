@@ -1,14 +1,18 @@
 # Local-run compose file for the vision worker.
-# Inside this folder only - NOT added to the shared root compose (that is OPS-2).
-version: "3.9"
-
+# Inside this folder only - NOT the shared root compose (that is OPS-2).
+#
+#   docker compose up --build
+#   STUB_MODE=unsafe docker compose up --build
+#
+# Values come from your shell (or a local, gitignored .env next to this file,
+# which compose reads automatically). Defaults below = stub provider, safe mode.
 services:
   vision-worker:
     build: .
-    env_file:
-      - .env.example
-    # Real keys go in a local .env (gitignored), not here.
     environment:
-      - VISION_PROVIDER=stub
-      - STUB_MODE=safe
+      VISION_PROVIDER: ${VISION_PROVIDER:-stub}
+      STUB_MODE: ${STUB_MODE:-safe}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     restart: unless-stopped

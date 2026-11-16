@@ -23,6 +23,4 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/src \
     LOG_LEVEL=info
 
-EXPOSE 8000
-
 CMD ["python", "-m", "vision_worker"]
