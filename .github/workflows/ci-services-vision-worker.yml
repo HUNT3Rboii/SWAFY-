@@ -16,8 +16,39 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/vision-worker
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Validate area
-        run: echo "No automated checks configured yet for services/vision-worker"
+
+      - name: Worker present?
+        id: check
+        run: |
+          if [ -f requirements-dev.txt ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::services/vision-worker has no code yet, skipping tests"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.check.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/vision-worker/requirements-dev.txt
+
+      - name: Install
+        if: steps.check.outputs.run == 'true'
+        run: pip install -r requirements-dev.txt
+
+      - name: Test
+        if: steps.check.outputs.run == 'true'
+        run: pytest
+
+      - name: Docker image builds
+        if: steps.check.outputs.run == 'true'
+        run: docker build -t vision-worker-ci .

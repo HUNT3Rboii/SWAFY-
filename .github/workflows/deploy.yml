@@ -1,0 +1,127 @@
+name: Deploy
+
+# On every merge to main: build the images, push them to GitHub's container
+# registry, then start the production stack in CI and check /health.
+# The demo machine updates with `docker compose ... pull && ... up -d` (infra/DEPLOY.md).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE_PREFIX: ghcr.io/hunt3rboii/swafy
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            context: apps/api
+            dockerfile: apps/api/Dockerfile
+          - name: worker
+            context: services/vision-worker
+            dockerfile: services/vision-worker/Dockerfile
+          - name: web
+            context: .
+            dockerfile: infra/web/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dockerfile present?
+        id: check
+        run: |
+          if [ -f "${{ matrix.dockerfile }}" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::${{ matrix.dockerfile }} not found yet, skipping ${{ matrix.name }} image"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to GitHub container registry
+        if: steps.check.outputs.build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        if: steps.check.outputs.build == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:latest
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:${{ github.sha }}
+
+  smoke-test:
+    needs: images
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test configuration
+        run: |
+          sed 's/CHANGE_ME/ci-test-secret/' prod.env.example > prod.env
+          echo "IMAGE_TAG=$IMAGE_TAG" >> prod.env
+          sed 's/CHANGE_ME/ci-test-secret/' env/api.prod.env.example > env/api.prod.env
+          sed 's/CHANGE_ME/ci-test-secret/' env/worker.prod.env.example > env/worker.prod.env
+
+      - name: Start stack (without the tunnel)
+        run: |
+          services="db minio minio-init web"
+          if docker manifest inspect "$IMAGE_PREFIX-api:$IMAGE_TAG" > /dev/null 2>&1; then
+            services="$services api"
+            echo "API_BUILT=true" >> "$GITHUB_ENV"
+          fi
+          docker compose -f docker-compose.prod.yml --env-file prod.env up -d $services
+          # minio-init is a one-time job: check it finished without error
+          docker compose -f docker-compose.prod.yml --env-file prod.env wait minio-init
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 30); do curl -sf http://localhost:8080/ > /dev/null && break; sleep 2; done
+          curl -sf http://localhost:8080/ > /dev/null && echo "web: ok"
+          curl -sI http://localhost:8080/ | grep -qi "x-content-type-options: nosniff" && echo "security headers: ok"
+          if [ "${API_BUILT:-}" = "true" ]; then
+            for i in $(seq 1 30); do curl -sf http://localhost:8080/health > /dev/null && break; sleep 2; done
+            curl -sf http://localhost:8080/health | grep -q '"ok"' && echo "/health: ok"
+          else
+            echo "::notice::No api image yet, /health not checked"
+          fi
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml --env-file prod.env logs --tail 50
+
+      - name: Stop
+        if: always()
+        run: docker compose -f docker-compose.prod.yml --env-file prod.env down --volumes
