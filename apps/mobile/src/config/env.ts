@@ -5,7 +5,7 @@
  * Set them in apps/mobile/.env.local (not committed); see .env.example.
  */
 
-const DEFAULT_API_BASE_URL = 'http://localhost:8000';
+const DEFAULT_API_BASE_URL = 'http://localhost:4010';
 
 function readApiBaseUrl(): string {
   const value = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
@@ -24,4 +24,9 @@ function readApiBaseUrl(): string {
   return value.replace(/\/+$/, '');
 }
 
+/**
+ * Where the API lives, as described in the root README:
+ * - mock API: http://<laptop IP>:4010
+ * - real API: http://<laptop IP>:8000/api/v1
+ */
 export const API_BASE_URL = readApiBaseUrl();

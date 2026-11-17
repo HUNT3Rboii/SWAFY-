@@ -1,56 +1,93 @@
-# Welcome to your Expo app 👋
+# SWAFY mobile app
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The citizen app: take a photo of a problem, send it, and follow what happens to it.
+Built with React Native, Expo and TypeScript. Part of the SWAFY monorepo (`apps/mobile`).
 
-## Get started
+## Requirements
 
-1. Install dependencies
+- Node.js 20.19 or newer (22 recommended)
+- An Android phone (the map needs a development build, see below)
+- Docker, to run the mock API (`infra/docker-compose.yml`)
+- A free [expo.dev](https://expo.dev) account, member of the `swafy-team` organization
+
+## Setup
+
+1. Install dependencies:
 
    ```bash
+   cd apps/mobile
    npm install
    ```
 
-2. Start the app
+   This also links `@swafy/api-client` from `packages/api-client`.
+
+2. Start the mock API (needs Docker), from the repository root:
 
    ```bash
-   npx expo start
+   cd infra
+   cp .env.example .env
+   docker compose up
    ```
 
-In the output, you'll find options to open the app in a
+   The mock answers with the examples from `docs/contracts/openapi.yaml` on port 4010.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+3. Create your own settings file and set the API address:
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+   ```bash
+   cp .env.example .env.local
+   ```
 
-## Get a fresh project
+   On a real phone, `localhost` means the phone itself. Use your computer's Wi-Fi IP
+   address instead (on Linux: `hostname -I`):
 
-When you're ready, run:
+   | | `EXPO_PUBLIC_API_BASE_URL` |
+   |---|---|
+   | Mock API | `http://192.168.1.20:4010` |
+   | Real API | `http://192.168.1.20:8000/api/v1` |
+
+   `.env.local` is ignored by git.
+
+## Run the app
+
+The map uses native code, so **Expo Go cannot open this app**. Install the SWAFY
+development build once:
+
+1. Open expo.dev, then `swafy-team`, then `swafy`, then **Builds**.
+2. Open the latest `development` build on your phone and install the APK.
+
+Then, every time you work:
 
 ```bash
-npm run reset-project
+npx expo start -c
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+Open the **SWAFY** app on your phone and pick your computer in the server list
+(or scan the QR code). The phone and the computer must be on the same Wi-Fi.
+If the network blocks the connection, use `npx expo start -c --tunnel`.
 
-### Other setup steps
+Rebuild the development build only when you add a library that contains native code:
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+npx eas-cli@latest build --profile development --platform android
+```
 
-## Learn more
+## Project layout
 
-To learn more about developing your project with Expo, look at the following resources:
+| Path | What it holds |
+|---|---|
+| `src/app/` | The screens. One file = one screen (Expo Router). |
+| `src/components/` | Reusable pieces (tab bar, themed text, map) |
+| `src/config/env.ts` | Reads `EXPO_PUBLIC_API_BASE_URL` |
+| `src/api/client.ts` | The API client from `@swafy/api-client` (generated from the contract) and its types |
+| `src/api/auth.ts` | Register, login and logout calls |
+| `src/auth/` | Who is logged in (`auth-context.tsx`) and the tokens saved in SecureStore |
+| `metro.config.js` | Lets Metro load `packages/api-client`, which is outside `apps/mobile` |
+| `eas.json` | Build profiles (development, preview, production) |
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Rules
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Only edit `apps/mobile/` for mobile work. Need a change elsewhere? Open an issue labelled
+  `type:integration` for the owner.
+- Categories and statuses come from the generated api-client, never from a hardcoded list.
+  See `docs/contracts/enums.md`.
+- Never commit `.env.local` or `node_modules`.

@@ -8,6 +8,9 @@
       ],
       "@/assets/*": [
         "./assets/*"
+      ],
+      "openapi-fetch": [
+        "./node_modules/openapi-fetch"
       ]
     }
   },
