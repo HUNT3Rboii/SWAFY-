@@ -37,8 +37,5 @@ jobs:
       - name: Expo type references
         run: echo '/// <reference types="expo/types" />' > expo-env.d.ts
 
-      # Not blocking yet: one known error from the Expo template
-      # (src/components/app-tabs.web.tsx). Remove `continue-on-error` once it is fixed.
       - name: Typecheck
-        continue-on-error: true
         run: npx tsc --noEmit
