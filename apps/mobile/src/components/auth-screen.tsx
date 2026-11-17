@@ -16,7 +16,6 @@ import { useAuth } from '@/auth/auth-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { USE_MOCK_API } from '@/config/env';
 import { useTheme } from '@/hooks/use-theme';
 
 type Mode = 'login' | 'register';
@@ -173,11 +172,6 @@ export function AuthScreen() {
               </Pressable>
             </View>
 
-            {__DEV__ && USE_MOCK_API && (
-              <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-                Demo mode: no real server is used.
-              </ThemedText>
-            )}
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

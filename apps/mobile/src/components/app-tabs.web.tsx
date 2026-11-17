@@ -6,7 +6,7 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Pressable, View, StyleSheet } from 'react-native';
+import { Pressable, View, StyleSheet, type PressableProps } from 'react-native';
 
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 
@@ -36,7 +36,9 @@ export default function AppTabs() {
 
 export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
+    // expo-router's ref type for the tab slot does not match Pressable's on web;
+    // the props are the same at runtime, so only the type is adjusted.
+    <Pressable {...(props as PressableProps)} style={({ pressed }) => pressed && styles.pressed}>
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={styles.tabButtonView}>

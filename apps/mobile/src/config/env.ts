@@ -5,7 +5,7 @@
  * Set them in apps/mobile/.env.local (not committed); see .env.example.
  */
 
-const DEFAULT_API_BASE_URL = 'http://localhost:8000';
+const DEFAULT_API_BASE_URL = 'http://localhost:4010';
 
 function readApiBaseUrl(): string {
   const value = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
@@ -24,14 +24,9 @@ function readApiBaseUrl(): string {
   return value.replace(/\/+$/, '');
 }
 
-/** Server address, without the /api/v1 prefix. Example: http://192.168.1.20:8000 */
-export const API_BASE_URL = readApiBaseUrl();
-
-/** Prefix of every API route, from docs/contracts/openapi.yaml (servers: /api/v1). */
-export const API_PREFIX = '/api/v1';
-
 /**
- * When true, the app answers API calls itself with fake data (src/api/mock.ts).
- * Useful while the backend is not running. Set EXPO_PUBLIC_USE_MOCK_API=false to use the real API.
+ * Where the API lives, as described in the root README:
+ * - mock API: http://<laptop IP>:4010
+ * - real API: http://<laptop IP>:8000/api/v1
  */
-export const USE_MOCK_API = process.env.EXPO_PUBLIC_USE_MOCK_API !== 'false';
+export const API_BASE_URL = readApiBaseUrl();

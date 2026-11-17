@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-import type { AuthTokens, User } from '@/api/types';
+import type { AuthTokens, User } from '@/api/client';
 
 /**
  * Saves the logged-in session in SecureStore, the phone's encrypted storage

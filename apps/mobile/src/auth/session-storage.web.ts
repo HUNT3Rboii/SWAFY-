@@ -1,4 +1,4 @@
-import type { AuthTokens, User } from '@/api/types';
+import type { AuthTokens, User } from '@/api/client';
 
 /**
  * Web version: SecureStore does not exist in browsers, so the session is only
