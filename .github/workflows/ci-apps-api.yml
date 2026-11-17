@@ -28,7 +28,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U swafy -d swafy"
+          --health-cmd "pg_isready -U swafy -d swafy_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 15
@@ -41,6 +41,7 @@ jobs:
       JWT_SECRET: test-secret-at-least-32-characters-long
       WORKER_SERVICE_TOKEN: test-worker-token-at-least-32-chars
       ENVIRONMENT: test
+      PYTHONPATH: src
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
